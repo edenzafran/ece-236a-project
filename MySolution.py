@@ -1,5 +1,7 @@
 import numpy as np
 from sklearn.metrics import accuracy_score
+from sklearn import svm
+
 ### TODO: import any other packages you need for your solution
 
 
@@ -7,24 +9,15 @@ from sklearn.metrics import accuracy_score
 class MyDecentralized:
     def __init__(self, K):
         self.K = K  # number of classes
-
-        ### TODO: Initialize other parameters needed in your algorithm
-        # examples:
-        # self.W = None   # shape (K, M)
-        # self.b = None   # shape (K,)
+        self.clf = None 
 
     def train(self, trainX, trainY):
-        ''' Task 1
-            TODO: train a multi-class linear classifier using LP/ILP.
-                  Store learned parameters you will use in predict().
-        '''
+        self.clf = svm.LinearSVC()
+        self.clf.fit(trainX, trainY)
         pass
 
     def predict(self, testX):
-        ''' Task 1
-            TODO: predict class labels for the input data (testX) using the trained classifier
-        '''
-        # predY = ...
+        predY = self.clf.predict(testX)
         return predY
 
     def evaluate(self, testX, testY):
