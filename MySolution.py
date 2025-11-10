@@ -75,7 +75,35 @@ class MyFeatureCompression:
               training data only (no test leakage).
             - Plotting: this output is used for "accuracy vs B_tot" and to compare against Task 1.
         """
-        result = {'B_tot': [], 'test_accuracy': []}
+        test_accuracies = np.zeros(len(B_tot_list))
+
+        for i in range(len(B_tot_list)):
+                    
+            M = 784
+            b = B_tot_list[i]//M  #number of bits per feature
+  
+            quantized_trainX = np.rint(trainX.astype(np.float64)/256 * (b**3))
+            quantized_valX = np.rint(valX.astype(np.float64)/256 * (b**3))
+            #quantized_testX = np.rint(testX.astype(np.float64)/256 * (b**3))
+
+            clf = MyDecentralized(K=3)
+            clf.train(quantized_trainX, trainY)
+            test_accuracies[i] = clf.evaluate(quantized_valX, valY)
+
+
+            #ideas
+
+            # save one bit for 0 (black), other bits for 100-200
+
+
+            # reconstruct each ith image from 1x784 into 28x28
+            # 28x28 into 14x14 by making 2x2 subblocks (nxn if we wanna up the compression), 
+            # ????? minimize L1 distance between 2x2 sublock and 1 integer to represent
+            #  construct 1x196 array from sublocks
+
+            
+
+        result = {'B_tot': B_tot_list, 'test_accuracy': test_accuracies}
         return result
 
     def run_decentralized_per_sensor(self, train_blocks, val_blocks, test_blocks, trainY, valY, testY, k_list):
@@ -111,7 +139,42 @@ class MyFeatureCompression:
               information during training or allocation decisions.
             - Plotting: used for "accuracy vs k" and to compare with centralized at matched B_tot.
         """
-        result = {'k': [], 'test_accuracy': [], 'b_s': []}
+        test_accuracies = np.zeros(len(k_list))
+        b_list = np.zeros(len(k_list)) #number of bits per feature
+
+        for i in range(len(k_list)):
+            M = int(784/4) # 196
+            b = k_list[i]//M  #number of bits per feature
+            b_list[i] = b
+            print(b)
+  
+            train_blocks_q = np.rint(np.array(train_blocks).astype(np.float64)/256 * (b**3))
+            val_blocks_q = np.rint(np.array(val_blocks).astype(np.float64)/256 * (b**3))
+            #quantized_testX = np.rint(test_blocks.astype(np.float64)/256 * (b**3))
+
+            quantized_trainX = []
+            k = 0
+            for j in range(len(train_blocks_q)):
+                quantized_trainX.extend(train_blocks_q[j][k:k+M])
+                k+=M
+            quantized_trainX = np.array(quantized_trainX)
+
+            quantized_valX = []
+            k = 0
+            for j in range(len(val_blocks_q)):
+                quantized_valX.extend(val_blocks_q[j][k:k+M])
+                k+=M
+            quantized_valX = np.array(quantized_valX)
+
+            quantized_trainX.reshape(800, 784)
+            quantized_valX.reshape(200, 784)
+
+            clf = MyDecentralized(K=3)
+            clf.train(quantized_trainX, trainY)
+            test_accuracies[i] = clf.evaluate(quantized_valX, valY)
+
+        
+        result = {'k': k_list, 'test_accuracy': test_accuracies, 'b_s': b_list}
         return result
 
     def run_decentralized_total(self, train_blocks, val_blocks, test_blocks, trainY, valY, testY, B_tot_list):
