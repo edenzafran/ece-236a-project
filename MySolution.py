@@ -4,6 +4,22 @@ from sklearn import svm
 
 ### TODO: import any other packages you need for your solution
 
+def flattener(blocks):
+    flattened_stacks = []
+    for j in range(len(blocks[0])):
+        quad0 = blocks[0][j].reshape(14,14)
+        quad1 = blocks[1][j].reshape(14,14)
+        quad2 = blocks[2][j].reshape(14,14)
+        quad3 = blocks[3][j].reshape(14,14)
+
+        stack1 = np.hstack([quad0, quad1])
+        stack2 = np.hstack([quad2, quad3])
+        stack3 = np.vstack([stack1, stack2])
+
+        flattened_stacks.append(stack3.flatten())
+    flattened_stacks = np.array(flattened_stacks)
+    return flattened_stacks  
+
 
 # --- Task 1 ---
 class MyDecentralized:
@@ -41,7 +57,11 @@ class MyFeatureCompression:
         """
         self.K = K  # number of classes
         # TODO: add any state you need (e.g., bit candidates, a base classifier)
-
+    
+        
+ 
+    
+    
     def run_centralized(self, trainX, trainY, valX, valY, testX, testY, B_tot_list):
         """
         Task 2 (Centralized compression)
@@ -82,9 +102,8 @@ class MyFeatureCompression:
             M = 784
             b = B_tot_list[i]//M  #number of bits per feature
   
-            quantized_trainX = np.rint(trainX.astype(np.float64)/256 * (b**3))
-            quantized_valX = np.rint(valX.astype(np.float64)/256 * (b**3))
-            #quantized_testX = np.rint(testX.astype(np.float64)/256 * (b**3))
+            quantized_trainX = np.rint(trainX.astype(np.float64)/256 * (2**b -1))
+            quantized_valX = np.rint(valX.astype(np.float64)/256 * (2**b - 1))
 
             clf = MyDecentralized(K=3)
             clf.train(quantized_trainX, trainY)
@@ -139,6 +158,7 @@ class MyFeatureCompression:
               information during training or allocation decisions.
             - Plotting: used for "accuracy vs k" and to compare with centralized at matched B_tot.
         """
+        
         test_accuracies = np.zeros(len(k_list))
         b_list = np.zeros(len(k_list)) #number of bits per feature
 
@@ -146,32 +166,17 @@ class MyFeatureCompression:
             M = int(784/4) # 196
             b = k_list[i]//M  #number of bits per feature
             b_list[i] = b
-            print(b)
-  
-            train_blocks_q = np.rint(np.array(train_blocks).astype(np.float64)/256 * (b**3))
-            val_blocks_q = np.rint(np.array(val_blocks).astype(np.float64)/256 * (b**3))
-            #quantized_testX = np.rint(test_blocks.astype(np.float64)/256 * (b**3))
 
-            quantized_trainX = []
-            k = 0
-            for j in range(len(train_blocks_q)):
-                quantized_trainX.extend(train_blocks_q[j][k:k+M])
-                k+=M
-            quantized_trainX = np.array(quantized_trainX)
+            train_blocks_q = np.rint(np.array(train_blocks).astype(np.float64)/256 * (2**b - 1))
+            val_blocks_q = np.rint(np.array(val_blocks).astype(np.float64)/256 * (2**b - 1))
 
-            quantized_valX = []
-            k = 0
-            for j in range(len(val_blocks_q)):
-                quantized_valX.extend(val_blocks_q[j][k:k+M])
-                k+=M
-            quantized_valX = np.array(quantized_valX)
-
-            quantized_trainX.reshape(800, 784)
-            quantized_valX.reshape(200, 784)
+            
+            flattened_train = flattener(train_blocks_q)
+            flattened_val = flattener(val_blocks_q)
 
             clf = MyDecentralized(K=3)
-            clf.train(quantized_trainX, trainY)
-            test_accuracies[i] = clf.evaluate(quantized_valX, valY)
+            clf.train(flattened_train, trainY)
+            test_accuracies[i] = clf.evaluate(flattened_val, valY)
 
         
         result = {'k': k_list, 'test_accuracy': test_accuracies, 'b_s': b_list}
@@ -207,7 +212,62 @@ class MyFeatureCompression:
               Test is for final reporting.
             - Plotting: used for "accuracy vs B_tot" and for the centralized vs decentralized overlay.
         """
-        result = {'B_tot': [], 'test_accuracy': [], 'best_allocation': []}
+        best_allocations = []
+        
+        final_accuracies = []
+        budgets = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        for i in range(len(B_tot_list)):
+            best_ratios = []
+            best_accuracy = 0.0
+            best_allocation = [0.0, 0.0, 0.0, 0.0]
+            for b0 in budgets:
+                for b1 in budgets:
+                    for b2 in budgets:
+                        for b3 in budgets:
+                            if b0+b1+b2+b3 != 1.0:
+                                continue
+                            # else:
+                            #     print(b0, b1, b2, b3)
+
+                            test_accuracies = np.zeros(len(B_tot_list))
+                            M = int(784/4) # 196
+                            b = B_tot_list[i]//M  #number of bits per feature
+
+                            # total bit allocation per quadrant
+                            b0_ = (B_tot_list[i] * b0)//M 
+                            b1_ = (B_tot_list[i] * b1)//M 
+                            b2_ = (B_tot_list[i] * b2)//M 
+                            b3_ = (B_tot_list[i] * b3)//M 
+
+                            bit_allocations = [b0_, b1_, b2_, b3_] 
+                            train_blocks_q = np.array([np.rint(np.array(train_blocks[i]).astype(np.float64)/256 * (2**bit_allocations[i] - 1)) for i in range(len(bit_allocations))])
+                            val_blocks_q = np.array([np.rint(np.array(val_blocks[i]).astype(np.float64)/256 * (2**bit_allocations[i] - 1)) for i in range(len(bit_allocations))]) 
+
+                            flattened_train = flattener(train_blocks_q)
+                            flattened_val = flattener(val_blocks_q)
+
+                            clf = MyDecentralized(K=3)
+                            clf.train(flattened_train, trainY)
+                            test_accuracies[i] = clf.evaluate(flattened_val, valY)
+
+                            if test_accuracies[i] > best_accuracy:
+                                best_ratios = [b0, b1, b2, b3]       
+                                best_accuracy = test_accuracies[i]
+                                best_allocation = np.array(bit_allocations) # bits per feature
+
+            best_allocations.append(np.array(best_ratios)*B_tot_list[i])
+            train_blocks_q = np.array([np.rint(np.array(train_blocks[i]).astype(np.float64)/256 * (2**best_allocation[i] - 1)) for i in range(len(best_allocation))])
+            test_blocks_q = np.array([np.rint(np.array(test_blocks[i]).astype(np.float64)/256 * (2**best_allocation[i] - 1)) for i in range(len(best_allocation))]) 
+            
+            flattened_train = flattener(train_blocks_q)
+            flattened_test = flattener(test_blocks_q)
+
+            clf = MyDecentralized(K=3)
+            clf.train(flattened_train, trainY)
+            final_accuracies.append(clf.evaluate(flattened_test, testY))
+
+
+        result = {'B_tot': B_tot_list, 'test_accuracy': final_accuracies, 'best_allocation': best_allocations}
         return result
 
 
