@@ -315,7 +315,18 @@ class MyTargetAllocator:
               respect train/val/test separation and report bits/image clearly.
             • If multiple solutions achieve α, return the smallest B according to your method.
         """
-        # min_B = ...
+        
+        out = feature_compressor.run_centralized(trainX, trainY, valX, valY, testX, testY, B_grid)
+        budgets  = out['B_tot']
+        percentages = out['test_accuracy']
+
+        min_B = 0.0
+        for i in range(len(percentages)):
+            if percentages[i] >= alpha:
+                min_B = budgets[i]
+                break
+
+
         return min_B
 
     def minimal_bits_decentralized(self, feature_compressor, train_blocks, val_blocks, test_blocks, trainY, valY, testY, alpha, B_grid):
@@ -357,5 +368,17 @@ class MyTargetAllocator:
               train/val/test separation and clearly report bits/image and the corresponding allocation.
             • If multiple solutions achieve α, return the one with the smallest B according to your method.
         """
-        # min_B, best_alloc = ..., ...
+        out = feature_compressor.run_decentralized_per_sensor(train_blocks, val_blocks, test_blocks, trainY, valY, testY, B_grid)
+        budgets  = out['k']
+        percentages = out['test_accuracy']
+        bit_budgets = out['b_s']
+
+        min_B = 0.0
+        best_alloc = 0.0
+        for i in range(len(percentages)):
+            if percentages[i] >= alpha:
+                min_B = budgets[i]
+                best_alloc = bit_budgets[i]
+                break
+
         return (min_B, best_alloc)
