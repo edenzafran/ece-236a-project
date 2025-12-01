@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn.metrics import accuracy_score
+from scipy.cluster.vq import whiten
 from sklearn import svm
+import random
 
 ### TODO: import any other packages you need for your solution
 
@@ -18,7 +20,72 @@ def flattener(blocks):
 
         flattened_stacks.append(stack3.flatten())
     flattened_stacks = np.array(flattened_stacks)
-    return flattened_stacks  
+    return flattened_stacks
+
+def vector_quantize(image, cur_k):
+    image = image.reshape([-1,1])
+    whitened_image = whiten(image) # (784 , 1)
+    code_book, clusters = kcluster(whitened_image, k = cur_k)
+    image = image.flatten()
+    for i in range(len(code_book)):
+        cluster = clusters[i][0]
+        for j in code_book[i]:
+            image[j] = cluster
+    return image
+    
+
+
+####
+# Source - https://stackoverflow.com/a
+# Posted by junwangbuaa, modified by community. See post 'Timeline' for change history
+# Retrieved 2025-11-29, License - CC BY-SA 3.0
+
+#Manhattan Distance
+def L1(v1,v2):
+    if(len(v1)!=len(v2)):
+        print("error")
+        return -1
+    return sum([abs(v1[i]-v2[i]) for i in range(len(v1))])
+
+# kmeans with L1 distance. 
+# rows refers to the NxM feature vectors
+def kcluster(rows,distance=L1,k=4):# Cited from Programming Collective Intelligence 
+    # Determine the minimum and maximum values for each point
+    ranges=[(min([row[i] for row in rows]),max([row[i] for row in rows])) for i in range(len(rows[0]))]
+
+    # Create k randomly placed centroids
+    clusters=[[random.random( )*(ranges[i][1]-ranges[i][0])+ranges[i][0] for i in range(len(rows[0]))] for j in range(k)]
+
+    lastmatches=None
+    for t in range(10):
+        #print("Iteration %d" % t)
+        bestmatches=[[] for i in range(k)]
+        # Find which centroid is the closest for each row
+        for j in range(len(rows)):
+            row=rows[j]
+            bestmatch=0
+            for i in range(k):
+                d=distance(clusters[i],row)
+                if d<distance(clusters[bestmatch],row): 
+                    bestmatch=i
+            bestmatches[bestmatch].append(j)
+        ## If the results are the same as last time, this is complete
+        if bestmatches==lastmatches:
+            break
+        lastmatches=bestmatches
+
+        # Move the centroids to the average of their members
+        for i in range(k):
+            avgs=[0.0]*len(rows[0])
+            if len(bestmatches[i])>0:
+                for rowid in bestmatches[i]:
+                    for m in range(len(rows[rowid])):
+                        avgs[m]+=rows[rowid][m]
+                for j in range(len(avgs)):
+                    avgs[j]/=len(bestmatches[i])
+                clusters[i]=avgs
+    return bestmatches, clusters
+####
 
 
 # --- Task 1 ---
@@ -56,12 +123,7 @@ class MyFeatureCompression:
             The project does not constrain the quantizer design; document your choices and bit accounting.
         """
         self.K = K  # number of classes
-        # TODO: add any state you need (e.g., bit candidates, a base classifier)
-    
-        
  
-    
-    
     def run_centralized(self, trainX, trainY, valX, valY, testX, testY, B_tot_list):
         """
         Task 2 (Centralized compression)
@@ -96,30 +158,20 @@ class MyFeatureCompression:
             - Plotting: this output is used for "accuracy vs B_tot" and to compare against Task 1.
         """
         test_accuracies = np.zeros(len(B_tot_list))
+        M = 784 # number of features (pixels)
 
         for i in range(len(B_tot_list)):
-                    
-            M = 784
-            b = B_tot_list[i]//M  #number of bits per feature
-  
-            quantized_trainX = np.rint(trainX.astype(np.float64)/256 * (2**b -1))
-            quantized_valX = np.rint(valX.astype(np.float64)/256 * (2**b - 1))
-
+            ### Vector Quantizer ###
+            b = B_tot_list[i]//M
+            cur_k = int((2**b))
+            
+            quantized_trainX = [vector_quantize(image, cur_k) for image in trainX] #(800, 784)
+            quantized_testX = [vector_quantize(image, cur_k) for image in testX] #(500, 784)
+            
+            ### Training ##
             clf = MyDecentralized(K=3)
             clf.train(quantized_trainX, trainY)
-            test_accuracies[i] = clf.evaluate(quantized_valX, valY)
-
-
-            #ideas
-
-            # save one bit for 0 (black), other bits for 100-200
-
-
-            # reconstruct each ith image from 1x784 into 28x28
-            # 28x28 into 14x14 by making 2x2 subblocks (nxn if we wanna up the compression), 
-            # ????? minimize L1 distance between 2x2 sublock and 1 integer to represent
-            #  construct 1x196 array from sublocks
-
+            test_accuracies[i] = clf.evaluate(quantized_testX, testY)
             
 
         result = {'B_tot': B_tot_list, 'test_accuracy': test_accuracies}
@@ -158,26 +210,34 @@ class MyFeatureCompression:
               information during training or allocation decisions.
             - Plotting: used for "accuracy vs k" and to compare with centralized at matched B_tot.
         """
-        
         test_accuracies = np.zeros(len(k_list))
         b_list = np.zeros(len(k_list)) #number of bits per feature
 
+        M = int(784/4) # 196 # number of features (pixels) in a quadrant
+
         for i in range(len(k_list)):
-            M = int(784/4) # 196
+            
             b = k_list[i]//M  #number of bits per feature
             b_list[i] = b
+            print(b)
+            cur_k = int((2**b)) # bit depth
 
-            train_blocks_q = np.rint(np.array(train_blocks).astype(np.float64)/256 * (2**b - 1))
-            val_blocks_q = np.rint(np.array(val_blocks).astype(np.float64)/256 * (2**b - 1))
-
+            quantized_train_blocks = []
+            for train_block in train_blocks:
+                quantized_train_block = [vector_quantize(image, cur_k) for image in train_block]
+                quantized_train_blocks.append(quantized_train_block)
             
-            flattened_train = flattener(train_blocks_q)
-            flattened_val = flattener(val_blocks_q)
+            quantized_test_blocks = []
+            for test_block in test_blocks:
+                quantized_test_block = [vector_quantize(image, cur_k) for image in test_block]
+                quantized_test_blocks.append(quantized_test_block)
+            
+            flattened_train = flattener(quantized_train_blocks)
+            flattened_test = flattener(quantized_test_blocks)
 
             clf = MyDecentralized(K=3)
             clf.train(flattened_train, trainY)
-            test_accuracies[i] = clf.evaluate(flattened_val, valY)
-
+            test_accuracies[i] = clf.evaluate(flattened_test, testY)
         
         result = {'k': k_list, 'test_accuracy': test_accuracies, 'b_s': b_list}
         return result
@@ -212,55 +272,86 @@ class MyFeatureCompression:
               Test is for final reporting.
             - Plotting: used for "accuracy vs B_tot" and for the centralized vs decentralized overlay.
         """
-        best_allocations = []
-        
-        final_accuracies = []
         budgets = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-        for i in range(len(B_tot_list)):
-            best_ratios = []
-            best_accuracy = 0.0
-            best_allocation = [0.0, 0.0, 0.0, 0.0]
-            for b0 in budgets:
-                for b1 in budgets:
-                    for b2 in budgets:
-                        for b3 in budgets:
-                            if b0+b1+b2+b3 != 1.0:
-                                continue
-                            # else:
-                            #     print(b0, b1, b2, b3)
 
-                            test_accuracies = np.zeros(len(B_tot_list))
-                            M = int(784/4) # 196
-                            b = B_tot_list[i]//M  #number of bits per feature
+        M = int(784/4) # 196
+        
+        best_ratios = []
+        test_accuracy = 0.0
+        best_accuracy = 0.0
+        best_allocation = [0.0, 0.0, 0.0, 0.0]
+        
+        # figure out best accuracy for minimal bit budget, then extrapolate to remainder of bit budgets
 
-                            # total bit allocation per quadrant
-                            b0_ = (B_tot_list[i] * b0)//M 
-                            b1_ = (B_tot_list[i] * b1)//M 
-                            b2_ = (B_tot_list[i] * b2)//M 
-                            b3_ = (B_tot_list[i] * b3)//M 
+        for b0 in budgets:
+            for b1 in budgets:
+                for b2 in budgets:
+                    for b3 in budgets:
+                        if b0+b1+b2+b3 != 1.0:
+                            continue
 
-                            bit_allocations = [b0_, b1_, b2_, b3_] 
-                            train_blocks_q = np.array([np.rint(np.array(train_blocks[i]).astype(np.float64)/256 * (2**bit_allocations[i] - 1)) for i in range(len(bit_allocations))])
-                            val_blocks_q = np.array([np.rint(np.array(val_blocks[i]).astype(np.float64)/256 * (2**bit_allocations[i] - 1)) for i in range(len(bit_allocations))]) 
+                        # bits per feature
+                        b0_ = (B_tot_list[0] * b0) 
+                        b1_ = (B_tot_list[0] * b1) 
+                        b2_ = (B_tot_list[0] * b2) 
+                        b3_ = (B_tot_list[0] * b3) 
 
-                            flattened_train = flattener(train_blocks_q)
-                            flattened_val = flattener(val_blocks_q)
+                        bit_allocations = [b0_, b1_, b2_, b3_] # bits per feature per quadrant
 
-                            clf = MyDecentralized(K=3)
-                            clf.train(flattened_train, trainY)
-                            test_accuracies[i] = clf.evaluate(flattened_val, valY)
+                        print(b0, b1, b2, b3)
+                        
+                        quantized_train_blocks = []
+                        for i in range(len(train_blocks)):
+                            train_block = train_blocks[i]
+                            cur_b = bit_allocations[i]//M
+                            cur_k = int((2**cur_b)) # bit depth (different per quadrant)
+                            quantized_train_block = [vector_quantize(image, cur_k) for image in train_block]
+                            quantized_train_blocks.append(quantized_train_block)
+                        
+                        
+                        quantized_val_blocks = []
+                        for i in range(len(val_blocks)):
+                            val_block = val_blocks[i]
+                            cur_b = bit_allocations[i]//M
+                            cur_k = int((2**cur_b)) # bit depth (different per quadrant)
+                            quantized_val_block = [vector_quantize(image, cur_k) for image in val_block]
+                            quantized_val_blocks.append(quantized_val_block)
+                        
+                        flattened_train = flattener(np.array(quantized_train_blocks))
+                        flattened_val = flattener(np.array(quantized_val_blocks))
 
-                            if test_accuracies[i] > best_accuracy:
-                                best_ratios = [b0, b1, b2, b3]       
-                                best_accuracy = test_accuracies[i]
-                                best_allocation = np.array(bit_allocations) # bits per feature
+                        clf = MyDecentralized(K=3)
+                        clf.train(flattened_train, trainY)
+                        test_accuracy = clf.evaluate(flattened_val, valY)
 
-            best_allocations.append(np.array(best_ratios)*B_tot_list[i])
-            train_blocks_q = np.array([np.rint(np.array(train_blocks[i]).astype(np.float64)/256 * (2**best_allocation[i] - 1)) for i in range(len(best_allocation))])
-            test_blocks_q = np.array([np.rint(np.array(test_blocks[i]).astype(np.float64)/256 * (2**best_allocation[i] - 1)) for i in range(len(best_allocation))]) 
-            
-            flattened_train = flattener(train_blocks_q)
-            flattened_test = flattener(test_blocks_q)
+                        if test_accuracy > best_accuracy:
+                            best_ratios = [b0, b1, b2, b3]       
+                            best_accuracy = test_accuracy
+
+        final_accuracies = []
+        for j in range(len(B_tot_list)):
+            best_allocations = np.array(best_ratios)*B_tot_list[j]
+            print(best_allocations)
+    
+            quantized_train_blocks = []
+            for i in range(len(train_blocks)):
+                train_block = train_blocks[i]
+                cur_b = best_allocations[i]//M
+                cur_k = int((2**cur_b)) # bit depth (different per quadrant)
+                quantized_train_block = [vector_quantize(image, cur_k) for image in train_block]
+                quantized_train_blocks.append(quantized_train_block)
+
+            quantized_test_blocks = []
+            for i in range(len(test_blocks)):
+                test_block = test_blocks[i]
+                cur_b = best_allocations[i]//M
+                cur_k = int((2**cur_b)) # bit depth (different per quadrant)
+                quantized_test_block = [vector_quantize(image, cur_k) for image in test_block]
+                quantized_test_blocks.append(quantized_test_block)
+
+    
+            flattened_train = flattener(quantized_train_blocks)
+            flattened_test = flattener(quantized_test_blocks)
 
             clf = MyDecentralized(K=3)
             clf.train(flattened_train, trainY)
@@ -322,10 +413,10 @@ class MyTargetAllocator:
 
         min_B = 0.0
         for i in range(len(percentages)):
+            print(i)
             if percentages[i] >= alpha:
                 min_B = budgets[i]
                 break
-
 
         return min_B
 
@@ -376,6 +467,7 @@ class MyTargetAllocator:
         min_B = 0.0
         best_alloc = 0.0
         for i in range(len(percentages)):
+            print(i)
             if percentages[i] >= alpha:
                 min_B = budgets[i]
                 best_alloc = bit_budgets[i]
