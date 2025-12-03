@@ -103,24 +103,12 @@ class MyFeatureCompression:
             b = B_tot_list[i]//M  #number of bits per feature
   
             quantized_trainX = np.rint(trainX.astype(np.float64)/256 * (2**b -1))
-            quantized_valX = np.rint(valX.astype(np.float64)/256 * (2**b - 1))
+            quantized_testX = np.rint(testX.astype(np.float64)/256 * (2**b - 1))
 
             clf = MyDecentralized(K=3)
             clf.train(quantized_trainX, trainY)
-            test_accuracies[i] = clf.evaluate(quantized_valX, valY)
+            test_accuracies[i] = clf.evaluate(quantized_testX, testY)
 
-
-            #ideas
-
-            # save one bit for 0 (black), other bits for 100-200
-
-
-            # reconstruct each ith image from 1x784 into 28x28
-            # 28x28 into 14x14 by making 2x2 subblocks (nxn if we wanna up the compression), 
-            # ????? minimize L1 distance between 2x2 sublock and 1 integer to represent
-            #  construct 1x196 array from sublocks
-
-            
 
         result = {'B_tot': B_tot_list, 'test_accuracy': test_accuracies}
         return result
@@ -168,15 +156,15 @@ class MyFeatureCompression:
             b_list[i] = b
 
             train_blocks_q = np.rint(np.array(train_blocks).astype(np.float64)/256 * (2**b - 1))
-            val_blocks_q = np.rint(np.array(val_blocks).astype(np.float64)/256 * (2**b - 1))
+            test_blocks_q = np.rint(np.array(test_blocks).astype(np.float64)/256 * (2**b - 1))
 
             
             flattened_train = flattener(train_blocks_q)
-            flattened_val = flattener(val_blocks_q)
+            flattened_test = flattener(test_blocks_q)
 
             clf = MyDecentralized(K=3)
             clf.train(flattened_train, trainY)
-            test_accuracies[i] = clf.evaluate(flattened_val, valY)
+            test_accuracies[i] = clf.evaluate(flattened_test, testY)
 
         
         result = {'k': k_list, 'test_accuracy': test_accuracies, 'b_s': b_list}
