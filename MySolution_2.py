@@ -219,7 +219,6 @@ class MyFeatureCompression:
             
             b = k_list[i]//M  #number of bits per feature
             b_list[i] = b
-            print(b)
             cur_k = int((2**b)) # bit depth
 
             quantized_train_blocks = []
@@ -297,8 +296,6 @@ class MyFeatureCompression:
                         b3_ = (B_tot_list[0] * b3) 
 
                         bit_allocations = [b0_, b1_, b2_, b3_] # bits per feature per quadrant
-
-                        print(b0, b1, b2, b3)
                         
                         quantized_train_blocks = []
                         for i in range(len(train_blocks)):
@@ -331,7 +328,6 @@ class MyFeatureCompression:
         final_accuracies = []
         for j in range(len(B_tot_list)):
             best_allocations = np.array(best_ratios)*B_tot_list[j]
-            print(best_allocations)
     
             quantized_train_blocks = []
             for i in range(len(train_blocks)):
@@ -413,7 +409,6 @@ class MyTargetAllocator:
 
         min_B = 0.0
         for i in range(len(percentages)):
-            print(i)
             if percentages[i] >= alpha:
                 min_B = budgets[i]
                 break
@@ -467,7 +462,6 @@ class MyTargetAllocator:
         min_B = 0.0
         best_alloc = 0.0
         for i in range(len(percentages)):
-            print(i)
             if percentages[i] >= alpha:
                 min_B = budgets[i]
                 best_alloc = bit_budgets[i]
