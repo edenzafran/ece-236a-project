@@ -1,5 +1,0 @@
-- in task 2, realized we were reporting accuracies for the validation set, changed this to the test set
-- set iterations in kcluster to 10 instead of 100 (run faster)
-- task 3.2, determine the best accuracies from the smallest bit budget and assume its the same for the remaining bit budgets (makes it run faster)
-
-- TODO: remove print statements
